@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"github.com/chaos-mesh/chaos-mesh/api/v1alpha1"
+	"github.com/chaos-mesh/chaos-mesh/controllers/basic"
+	pkgCfg "github.com/chaos-mesh/chaos-mesh/pkg/config"
 	ctx "github.com/chaos-mesh/chaos-mesh/pkg/router/context"
 	endpoint "github.com/chaos-mesh/chaos-mesh/pkg/router/endpoint"
 
@@ -40,17 +42,13 @@ var log = ctrl.Log.WithName("controller")
 
 // Reconciler for common chaos
 type Reconciler struct {
-	endpoint.Endpoint
-	ctx.Context
+	*basic.Reconciler
 }
 
 // NewReconciler would create Reconciler for common chaos
-func NewReconciler(req ctrl.Request, e endpoint.Endpoint, ctx ctx.Context) *Reconciler {
-	ctx.Log = ctx.Log.WithName(req.NamespacedName.String())
-
+func NewReconciler(req ctrl.Request, e endpoint.Endpoint, ctx ctx.Context, cfg *pkgCfg.ChaosControllerConfig) *Reconciler {
 	return &Reconciler{
-		Endpoint: e,
-		Context:  ctx,
+		Reconciler: basic.NewReconciler(req, e, ctx, cfg),
 	}
 }
 
@@ -105,7 +103,14 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		// Start chaos action
 		r.Log.Info("Performing Action")
 
-		if err = r.Apply(ctx, req, chaos); err != nil {
+		chaosTargets, err := r.SelectChaosTargets(ctx, chaos)
+		if err != nil {
+			r.Log.Error(err, "failed to select chaos targets")
+			updateFailedMessage(ctx, r, chaos, err.Error())
+			return ctrl.Result{Requeue: true}, err
+		}
+
+		if err = r.Apply(ctx, req, chaos, chaosTargets); err != nil {
 			r.Log.Error(err, "failed to apply chaos action")
 			updateFailedMessage(ctx, r, chaos, err.Error())
 

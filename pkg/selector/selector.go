@@ -1,16 +1,3 @@
-// Copyright 2019 Chaos Mesh Authors.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package selector
 
 import (
@@ -41,14 +28,37 @@ import (
 
 var log = ctrl.Log.WithName("selector")
 
-type SelectSpec interface {
-	GetSelector() v1alpha1.SelectorSpec
-	GetMode() v1alpha1.PodMode
-	GetValue() string
+// chaosTargetLister list chaos targets(Pods,Services,ExternalTargets) by selector info
+type chaosTargetLister struct {
+	Client client.Client
+	Reader client.Reader
+
+	ClusterScoped                        bool
+	TargetNamespace                      string
+	AllowedNamespaces, IgnoredNamespaces string
 }
 
-// SelectAndFilterPods returns the list of pods that filtered by selector and PodMode
-func SelectAndFilterPods(ctx context.Context, c client.Client, r client.Reader, spec SelectSpec, clusterScoped bool, targetNamespace string, allowedNamespaces, ignoredNamespaces string) ([]v1.Pod, error) {
+// ChaosTargetLister is chaos target lister
+type ChaosTargetLister interface {
+	SelectAndFilterPods(ctx context.Context, spec v1alpha1.InnerSelector) ([]v1.Pod, error)
+	SelectPods(ctx context.Context, selector v1alpha1.SelectorSpec) ([]v1.Pod, error)
+	GetService(ctx context.Context, namespace, controllerNamespace string, serviceName string) (*v1.Service, error)
+}
+
+// NewChaosTargetLister new an instance of chaos target lister
+func NewChaosTargetLister(c client.Client, r client.Reader, clusterScoped bool, targetNamespace string, allowedNamespaces, ignoredNamespaces string) ChaosTargetLister {
+	return &chaosTargetLister{
+		Client:            c,
+		Reader:            r,
+		ClusterScoped:     clusterScoped,
+		TargetNamespace:   targetNamespace,
+		AllowedNamespaces: allowedNamespaces,
+		IgnoredNamespaces: ignoredNamespaces,
+	}
+}
+
+// SelectAndFilterPods help select chaos target pods
+func (s *chaosTargetLister) SelectAndFilterPods(ctx context.Context, spec v1alpha1.InnerSelector) ([]v1.Pod, error) {
 	if pods := mock.On("MockSelectAndFilterPods"); pods != nil {
 		return pods.(func() []v1.Pod)(), nil
 	}
@@ -60,7 +70,7 @@ func SelectAndFilterPods(ctx context.Context, c client.Client, r client.Reader, 
 	mode := spec.GetMode()
 	value := spec.GetValue()
 
-	pods, err := SelectPods(ctx, c, r, selector, clusterScoped, targetNamespace, allowedNamespaces, ignoredNamespaces)
+	pods, err := s.SelectPods(ctx, selector)
 	if err != nil {
 		return nil, err
 	}
@@ -78,31 +88,29 @@ func SelectAndFilterPods(ctx context.Context, c client.Client, r client.Reader, 
 	return filteredPod, nil
 }
 
-//revive:disable:flag-parameter
-
 // SelectPods returns the list of pods that are available for pod chaos action.
 // It returns all pods that match the configured label, annotation and namespace selectors.
 // If pods are specifically specified by `selector.Pods`, it just returns the selector.Pods.
-func SelectPods(ctx context.Context, c client.Client, r client.Reader, selector v1alpha1.SelectorSpec, clusterScoped bool, targetNamespace string, allowedNamespaces, ignoredNamespaces string) ([]v1.Pod, error) {
+func (s *chaosTargetLister) SelectPods(ctx context.Context, selector v1alpha1.SelectorSpec) ([]v1.Pod, error) {
 	// TODO: refactor: make different selectors to replace if-else logics
 	var pods []v1.Pod
 
 	// pods are specifically specified
 	if len(selector.Pods) > 0 {
 		for ns, names := range selector.Pods {
-			if !clusterScoped {
-				if targetNamespace != ns {
+			if !s.ClusterScoped {
+				if s.TargetNamespace != ns {
 					log.Info("skip namespace because ns is out of scope within namespace scoped mode", "namespace", ns)
 					continue
 				}
 			}
-			if !config.IsAllowedNamespaces(ns, allowedNamespaces, ignoredNamespaces) {
+			if !config.IsAllowedNamespaces(ns, s.AllowedNamespaces, s.IgnoredNamespaces) {
 				log.Info("filter pod by namespaces", "namespace", ns)
 				continue
 			}
 			for _, name := range names {
 				var pod v1.Pod
-				err := c.Get(ctx, types.NamespacedName{
+				err := s.Client.Get(ctx, types.NamespacedName{
 					Namespace: ns,
 					Name:      name,
 				}, &pod)
@@ -123,19 +131,19 @@ func SelectPods(ctx context.Context, c client.Client, r client.Reader, selector 
 		return pods, nil
 	}
 
-	if !clusterScoped {
+	if !s.ClusterScoped {
 		if len(selector.Namespaces) > 1 {
 			return nil, fmt.Errorf("could NOT use more than 1 namespace selector within namespace scoped mode")
 		} else if len(selector.Namespaces) == 1 {
-			if selector.Namespaces[0] != targetNamespace {
+			if selector.Namespaces[0] != s.TargetNamespace {
 				return nil, fmt.Errorf("could NOT list pods from out of scoped namespace: %s", selector.Namespaces[0])
 			}
 		}
 	}
 
 	var listOptions = client.ListOptions{}
-	if !clusterScoped {
-		listOptions.Namespace = targetNamespace
+	if !s.ClusterScoped {
+		listOptions.Namespace = s.TargetNamespace
 	}
 	if len(selector.LabelSelectors) > 0 || len(selector.ExpressionSelectors) > 0 {
 		metav1Ls := &metav1.LabelSelector{
@@ -149,15 +157,15 @@ func SelectPods(ctx context.Context, c client.Client, r client.Reader, selector 
 		listOptions.LabelSelector = ls
 	}
 
-	listFunc := c.List
+	listFunc := s.Client.List
 
 	if len(selector.FieldSelectors) > 0 {
 		listOptions.FieldSelector = fields.SelectorFromSet(selector.FieldSelectors)
 
 		// Since FieldSelectors need to implement index creation, Reader.List is used to get the pod list.
 		// Otherwise, just call Client.List directly, which can be obtained through cache.
-		if r != nil {
-			listFunc = r.List
+		if s.Reader != nil {
+			listFunc = s.Reader.List
 		}
 	}
 
@@ -190,7 +198,7 @@ func SelectPods(ctx context.Context, c client.Client, r client.Reader, selector 
 		if len(selector.Nodes) > 0 {
 			for _, nodename := range selector.Nodes {
 				var node v1.Node
-				if err := c.Get(ctx, types.NamespacedName{Name: nodename}, &node); err != nil {
+				if err := s.Client.Get(ctx, types.NamespacedName{Name: nodename}, &node); err != nil {
 					return nil, err
 				}
 				nodes = append(nodes, node)
@@ -198,14 +206,14 @@ func SelectPods(ctx context.Context, c client.Client, r client.Reader, selector 
 		}
 		if len(selector.NodeSelectors) > 0 {
 			nodeListOptions.LabelSelector = labels.SelectorFromSet(selector.NodeSelectors)
-			if err := c.List(ctx, &nodeList, &nodeListOptions); err != nil {
+			if err := s.Client.List(ctx, &nodeList, &nodeListOptions); err != nil {
 				return nil, err
 			}
 			nodes = append(nodes, nodeList.Items...)
 		}
 		pods = filterPodByNode(pods, nodes)
 	}
-	pods = filterByNamespaces(pods, allowedNamespaces, ignoredNamespaces)
+	pods = filterByNamespaces(pods, s.AllowedNamespaces, s.IgnoredNamespaces)
 
 	namespaceSelector, err := parseSelector(strings.Join(selector.Namespaces, ","))
 	if err != nil {
@@ -234,17 +242,15 @@ func SelectPods(ctx context.Context, c client.Client, r client.Reader, selector 
 	return pods, nil
 }
 
-//revive:enable:flag-parameter
-
 // GetService get k8s service by service name
-func GetService(ctx context.Context, c client.Client, namespace, controllerNamespace string, serviceName string) (*v1.Service, error) {
+func (s *chaosTargetLister) GetService(ctx context.Context, namespace, controllerNamespace string, serviceName string) (*v1.Service, error) {
 	// use the environment value if namespace is empty
 	if len(namespace) == 0 {
 		namespace = controllerNamespace
 	}
 
 	service := &v1.Service{}
-	err := c.Get(ctx, client.ObjectKey{
+	err := s.Client.Get(ctx, client.ObjectKey{
 		Namespace: namespace,
 		Name:      serviceName,
 	}, service)
@@ -577,7 +583,7 @@ func parseSelector(str string) (labels.Selector, error) {
 }
 
 func getFixedSubListFromPodList(pods []v1.Pod, num int) []v1.Pod {
-	indexes := RandomFixedIndexes(0, uint(len(pods)), uint(num))
+	indexes := randomFixedIndexes(0, uint(len(pods)), uint(num))
 
 	var filteredPods []v1.Pod
 
@@ -589,9 +595,9 @@ func getFixedSubListFromPodList(pods []v1.Pod, num int) []v1.Pod {
 	return filteredPods
 }
 
-// RandomFixedIndexes returns the `count` random indexes between `start` and `end`.
+// randomFixedIndexes returns the `count` random indexes between `start` and `end`.
 // [start, end)
-func RandomFixedIndexes(start, end, count uint) []uint {
+func randomFixedIndexes(start, end, count uint) []uint {
 	var indexes []uint
 	m := make(map[uint]uint, count)
 

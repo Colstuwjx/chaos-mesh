@@ -16,6 +16,7 @@ package v1alpha1
 import (
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -229,6 +230,35 @@ type InnerObject interface {
 	IsPaused() bool
 	GetChaos() *ChaosInstance
 	StatefulObject
+}
+
+// +kubebuilder:object:generate=false
+
+// InnerSelector is the common selector interface
+type InnerSelector interface {
+	GetSelector() SelectorSpec
+	GetMode() PodMode
+	GetValue() string
+}
+
+// +kubebuilder:object:generate=false
+
+// InnerChaosTargetSelector is selectors map
+// it will be resolved to InnerChaosTarget
+type InnerChaosTargetSelector struct {
+	Source     *InnerSelector
+	Target     *InnerSelector
+	DNSService *string
+}
+
+// +kubebuilder:object:generate=false
+
+// InnerChaosTarget is parsed chaos targets based on InnerSelector
+// e.g. Pods, Services, External Targets.
+type InnerChaosTarget struct {
+	SourcePods []corev1.Pod
+	TargetPods []corev1.Pod
+	DNSService *corev1.Service
 }
 
 // +kubebuilder:object:generate=false

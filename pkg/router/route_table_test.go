@@ -48,7 +48,7 @@ type testEndpoint struct {
 	output *string
 }
 
-func (e *testEndpoint) Apply(ctx context.Context, req ctrl.Request, chaos v1alpha1.InnerObject) error {
+func (e *testEndpoint) Apply(ctx context.Context, req ctrl.Request, chaos v1alpha1.InnerObject, chaosTargets []*v1alpha1.InnerChaosTarget) error {
 	return nil
 }
 
@@ -58,6 +58,10 @@ func (e *testEndpoint) Recover(ctx context.Context, req ctrl.Request, chaos v1al
 
 func (e *testEndpoint) Object() v1alpha1.InnerObject {
 	return &v1alpha1.NetworkChaos{}
+}
+
+func (e *testEndpoint) Selectors(obj v1alpha1.InnerObject) []v1alpha1.InnerSelector {
+	return []v1alpha1.InnerSelector{}
 }
 
 var _ = Describe("Router", func() {

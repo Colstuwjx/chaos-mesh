@@ -72,7 +72,7 @@ func Register(name string, obj runtime.Object, routeFunc func(runtime.Object) bo
 func SetupWithManagerAndConfigs(mgr ctrl.Manager, cfg *config.ChaosControllerConfig) error {
 	for typ, end := range routeTable {
 		log.Info("setup reconciler with manager", "type", typ, "endpoint", end.Name)
-		reconciler := NewReconciler(end.Name, end.Object, mgr, end.Endpoints, cfg.ClusterScoped, cfg.TargetNamespace)
+		reconciler := NewReconciler(end.Name, end.Object, mgr, end.Endpoints, cfg)
 		err := reconciler.SetupWithManager(mgr)
 		if err != nil {
 			log.Error(err, "fail to setup reconciler with manager")

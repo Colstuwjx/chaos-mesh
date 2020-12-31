@@ -25,11 +25,15 @@ import (
 type InnerReconciler interface {
 
 	// Apply means the reconciler perform the chaos action
-	Apply(ctx context.Context, req ctrl.Request, chaos v1alpha1.InnerObject) error
+	Apply(ctx context.Context, req ctrl.Request, chaos v1alpha1.InnerObject, chaosTargets []*v1alpha1.InnerChaosTarget) error
 
 	// Recover means the reconciler recovers the chaos action
 	Recover(ctx context.Context, req ctrl.Request, chaos v1alpha1.InnerObject) error
 
 	// Object would return the instance of chaos
 	Object() v1alpha1.InnerObject
+
+	// Selectors would return the chaos target selectors
+	// it has a boolean flag right now, for triggering if need do target resolution.
+	Selectors(obj v1alpha1.InnerObject) []v1alpha1.InnerSelector
 }

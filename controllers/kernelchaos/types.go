@@ -52,7 +52,7 @@ type endpoint struct {
 }
 
 // Apply applies KernelChaos
-func (r *endpoint) Apply(ctx context.Context, req ctrl.Request, chaos v1alpha1.InnerObject) error {
+func (r *endpoint) Apply(ctx context.Context, req ctrl.Request, chaos v1alpha1.InnerObject, chaosTargets []*v1alpha1.InnerChaosTarget) error {
 	kernelChaos, ok := chaos.(*v1alpha1.KernelChaos)
 	if !ok {
 		err := errors.New("chaos is not kernelChaos")
@@ -203,6 +203,17 @@ func (r *endpoint) recoverPod(ctx context.Context, pod *v1.Pod, chaos *v1alpha1.
 // Object would return the instance of chaos
 func (r *endpoint) Object() v1alpha1.InnerObject {
 	return &v1alpha1.KernelChaos{}
+}
+
+// Selectors would return the chaos target selectors
+func (r *endpoint) Selectors(chaos v1alpha1.InnerObject) (selectors []v1alpha1.InnerSelector) {
+	kernelchaos, ok := chaos.(*v1alpha1.KernelChaos)
+	if !ok {
+		r.Log.Error("chaos is not KernelChaos", "chaos", chaos)
+		return
+	}
+	selectors = append(selectors, &kernelchaos.Spec)
+	return selectors
 }
 
 func (r *endpoint) applyAllPods(ctx context.Context, pods []v1.Pod, chaos *v1alpha1.KernelChaos) error {

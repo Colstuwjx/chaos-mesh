@@ -36,6 +36,7 @@ import (
 	"github.com/chaos-mesh/chaos-mesh/controllers/config"
 	"github.com/chaos-mesh/chaos-mesh/pkg/chaosdaemon/client"
 	"github.com/chaos-mesh/chaos-mesh/pkg/chaosdaemon/pb"
+	pkgCfg "github.com/chaos-mesh/chaos-mesh/pkg/config"
 	"github.com/chaos-mesh/chaos-mesh/pkg/events"
 	"github.com/chaos-mesh/chaos-mesh/pkg/finalizer"
 	"github.com/chaos-mesh/chaos-mesh/pkg/router"
@@ -47,10 +48,11 @@ import (
 // endpoint is dns-chaos reconciler
 type endpoint struct {
 	ctx.Context
+	pkgCfg.ChaosControllerConfig
 }
 
 // Apply applies dns-chaos
-func (r *endpoint) Apply(ctx context.Context, req ctrl.Request, chaos v1alpha1.InnerObject) error {
+func (r *endpoint) Apply(ctx context.Context, req ctrl.Request, chaos v1alpha1.InnerObject, chaosTargets []*v1alpha1.InnerChaosTarget) error {
 	dnschaos, ok := chaos.(*v1alpha1.DNSChaos)
 	if !ok {
 		err := errors.New("chaos is not DNSChaos")
@@ -58,27 +60,22 @@ func (r *endpoint) Apply(ctx context.Context, req ctrl.Request, chaos v1alpha1.I
 		return err
 	}
 
-	pods, err := selector.SelectAndFilterPods(ctx, r.Client, r.Reader, &dnschaos.Spec, config.ControllerCfg.ClusterScoped, config.ControllerCfg.TargetNamespace, config.ControllerCfg.AllowedNamespaces, config.ControllerCfg.IgnoredNamespaces)
-	if err != nil {
-		r.Log.Error(err, "failed to select and generate pods")
+	if len(chaosTargets) != 1 {
+		err := errors.New("unexpected chaos target for DNSChaos")
+		r.Log.Error(err, "invalid chaos target", "chaos", chaos)
 		return err
 	}
 
-	// get dns server's ip used for chaos
-	service, err := selector.GetService(ctx, r.Client, "", config.ControllerCfg.Namespace, config.ControllerCfg.DNSServiceName)
-	if err != nil {
-		r.Log.Error(err, "fail to get service")
-		return err
-	}
-	r.Log.Info("Set DNS chaos to DNS service", "ip", service.Spec.ClusterIP)
+	dnsSvc := chaosTargets[0].DNSService
+	pods := chaosTargets[0].Pods
 
-	err = r.setDNSServerRules(service.Spec.ClusterIP, config.ControllerCfg.DNSServicePort, dnschaos.Name, pods, dnschaos.Spec.Action, dnschaos.Spec.Scope)
+	err := r.setDNSServerRules(dnsSvc.Spec.ClusterIP, config.ControllerCfg.DNSServicePort, dnschaos.Name, pods, dnschaos.Spec.Action, dnschaos.Spec.Scope)
 	if err != nil {
 		r.Log.Error(err, "fail to set DNS server rules")
 		return err
 	}
 
-	if err = r.applyAllPods(ctx, pods, dnschaos, service.Spec.ClusterIP); err != nil {
+	if err = r.applyAllPods(ctx, pods, dnschaos, dnsSvc.Spec.ClusterIP); err != nil {
 		r.Log.Error(err, "failed to apply chaos on all pods")
 		return err
 	}
@@ -107,15 +104,17 @@ func (r *endpoint) Recover(ctx context.Context, req ctrl.Request, chaos v1alpha1
 		return err
 	}
 
+	chaoslister := selector.NewChaosTargetLister(r.Client, r.Reader, r.ClusterScoped, r.TargetNamespace, r.AllowedNamespaces, r.IgnoredNamespaces)
+
 	// get dns server's ip used for chaos
-	service, err := selector.GetService(ctx, r.Client, "", config.ControllerCfg.Namespace, config.ControllerCfg.DNSServiceName)
+	service, err := chaoslister.GetService(ctx, "", r.Namespace, r.DNSServiceName)
 	if err != nil {
 		r.Log.Error(err, "fail to get service")
 		return err
 	}
 	r.Log.Info("Cancel DNS chaos to DNS service", "ip", service.Spec.ClusterIP)
 
-	r.cancelDNSServerRules(service.Spec.ClusterIP, config.ControllerCfg.DNSServicePort, dnschaos.Name)
+	r.cancelDNSServerRules(service.Spec.ClusterIP, r.DNSServicePort, dnschaos.Name)
 
 	if err := r.cleanFinalizersAndRecover(ctx, dnschaos); err != nil {
 		return err
@@ -204,6 +203,17 @@ func (r *endpoint) Object() v1alpha1.InnerObject {
 	return &v1alpha1.DNSChaos{}
 }
 
+// Selectors would return the chaos target selectors
+func (r *endpoint) Selectors(chaos v1alpha1.InnerObject) (selectors []v1alpha1.InnerSelector) {
+	dnschaos, ok := chaos.(*v1alpha1.DNSChaos)
+	if !ok {
+		r.Log.Error("chaos is not DNSChaos", "chaos", chaos)
+		return
+	}
+	selectors = append(selectors, &dnschaos.Spec)
+	return selectors
+}
+
 func (r *endpoint) applyAllPods(ctx context.Context, pods []v1.Pod, chaos *v1alpha1.DNSChaos, dnsServerIP string) error {
 	g := errgroup.Group{}
 	for index := range pods {
@@ -232,7 +242,7 @@ func (r *endpoint) applyPod(ctx context.Context, pod *v1.Pod, dnsServerIP string
 	r.Log.Info("Try to apply dns chaos", "namespace",
 		pod.Namespace, "name", pod.Name)
 	daemonClient, err := client.NewChaosDaemonClient(ctx, r.Client,
-		pod, config.ControllerCfg.ChaosDaemonPort)
+		pod, r.ChaosDaemonPort)
 	if err != nil {
 		r.Log.Error(err, "get chaos daemon client")
 		return err

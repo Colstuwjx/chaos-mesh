@@ -31,6 +31,7 @@ import (
 	"github.com/chaos-mesh/chaos-mesh/api/v1alpha1"
 	"github.com/chaos-mesh/chaos-mesh/controllers/common"
 	"github.com/chaos-mesh/chaos-mesh/controllers/twophase"
+	"github.com/chaos-mesh/chaos-mesh/pkg/config"
 	"github.com/chaos-mesh/chaos-mesh/pkg/events"
 	ctx "github.com/chaos-mesh/chaos-mesh/pkg/router/context"
 	end "github.com/chaos-mesh/chaos-mesh/pkg/router/endpoint"
@@ -38,21 +39,20 @@ import (
 
 // Reconciler reconciles a chaos resource
 type Reconciler struct {
-	Name            string
-	Object          runtime.Object
-	Endpoints       []routeEndpoint
-	ClusterScoped   bool
-	TargetNamespace string
+	Name      string
+	Object    runtime.Object
+	Endpoints []routeEndpoint
+	Cfg       *config.ChaosControllerConfig
 
 	ctx.Context
 }
 
 // Reconcile reconciles a chaos resource
 func (r *Reconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err error) {
-	if !r.ClusterScoped && req.Namespace != r.TargetNamespace {
+	if !r.Cfg.ClusterScoped && req.Namespace != r.Cfg.TargetNamespace {
 		// NOOP
 		r.Log.Info("ignore chaos which belongs to an unexpected namespace within namespace scoped mode",
-			"chaosName", req.Name, "expectedNamespace", r.TargetNamespace, "actualNamespace", req.Namespace)
+			"chaosName", req.Name, "expectedNamespace", r.Cfg.TargetNamespace, "actualNamespace", req.Namespace)
 		return ctrl.Result{}, nil
 	}
 
@@ -95,11 +95,11 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err error)
 
 	var reconciler reconcile.Reconciler
 	if scheduler == nil && duration == nil {
-		reconciler = common.NewReconciler(req, controller, ctx)
+		reconciler = common.NewReconciler(req, controller, ctx, r.Cfg)
 	} else if scheduler != nil {
 		// scheduler != nil && duration != nil
 		// but PodKill is an expection
-		reconciler = twophase.NewReconciler(req, controller, ctx)
+		reconciler = twophase.NewReconciler(req, controller, ctx, r.Cfg)
 	} else {
 		err := errors.Errorf("both scheduler and duration should be nil or not nil")
 		r.Log.Error(err, "fail to construct reconciler", "scheduler", scheduler, "duration", duration)
@@ -118,13 +118,12 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err error)
 }
 
 // NewReconciler creates a new reconciler
-func NewReconciler(name string, object runtime.Object, mgr ctrl.Manager, endpoints []routeEndpoint, clusterScoped bool, targetNamespace string) *Reconciler {
+func NewReconciler(name string, object runtime.Object, mgr ctrl.Manager, endpoints []routeEndpoint, cfg *config.ChaosControllerConfig) *Reconciler {
 	return &Reconciler{
-		Name:            name,
-		Object:          object,
-		Endpoints:       endpoints,
-		ClusterScoped:   clusterScoped,
-		TargetNamespace: targetNamespace,
+		Name:      name,
+		Object:    object,
+		Endpoints: endpoints,
+		Cfg:       cfg,
 
 		Context: ctx.Context{
 			Client:        mgr.GetClient(),

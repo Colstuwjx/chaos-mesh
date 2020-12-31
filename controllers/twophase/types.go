@@ -24,6 +24,8 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"github.com/chaos-mesh/chaos-mesh/api/v1alpha1"
+	"github.com/chaos-mesh/chaos-mesh/controllers/basic"
+	pkgCfg "github.com/chaos-mesh/chaos-mesh/pkg/config"
 	ctx "github.com/chaos-mesh/chaos-mesh/pkg/router/context"
 	"github.com/chaos-mesh/chaos-mesh/pkg/router/endpoint"
 
@@ -34,17 +36,13 @@ const emptyString = ""
 
 // Reconciler for the twophase reconciler
 type Reconciler struct {
-	endpoint.Endpoint
-	ctx.Context
+	*basic.Reconciler
 }
 
 // NewReconciler would create reconciler for twophase controller
-func NewReconciler(req ctrl.Request, e endpoint.Endpoint, ctx ctx.Context) *Reconciler {
-	ctx.Log = ctx.Log.WithName(req.NamespacedName.String())
-
+func NewReconciler(req ctrl.Request, e endpoint.Endpoint, ctx ctx.Context, cfg *pkgCfg.ChaosControllerConfig) *Reconciler {
 	return &Reconciler{
-		Endpoint: e,
-		Context:  ctx,
+		Reconciler: basic.NewReconciler(req, e, ctx, cfg),
 	}
 }
 
@@ -93,10 +91,17 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	r.Log.Info("decide target phase", "target phase", targetPhase)
 
+	chaosTargets, err := r.SelectChaosTargets(ctx, chaos)
+	if err != nil {
+		r.Log.Error(err, "failed to select chaos targets")
+		return ctrl.Result{}, err
+	}
+
 	machine := chaosStateMachine{
-		Chaos:      chaos,
-		Req:        req,
-		Reconciler: r,
+		Chaos:        chaos,
+		ChaosTargets: chaosTargets,
+		Req:          req,
+		Reconciler:   r,
 	}
 	err = machine.Into(ctx, targetPhase, now)
 	if err != nil {

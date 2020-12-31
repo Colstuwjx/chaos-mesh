@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/chaos-mesh/chaos-mesh/api/v1alpha1"
+	"github.com/chaos-mesh/chaos-mesh/controllers/basic"
 	"github.com/chaos-mesh/chaos-mesh/pkg/mock"
 	ctx "github.com/chaos-mesh/chaos-mesh/pkg/router/context"
 	end "github.com/chaos-mesh/chaos-mesh/pkg/router/endpoint"
@@ -62,7 +63,7 @@ var _ end.Endpoint = (*fakeEndpoint)(nil)
 
 type fakeEndpoint struct{}
 
-func (r fakeEndpoint) Apply(ctx context.Context, req ctrl.Request, chaos v1alpha1.InnerObject) error {
+func (r fakeEndpoint) Apply(ctx context.Context, req ctrl.Request, chaos v1alpha1.InnerObject, chaosTargets []*v1alpha1.InnerChaosTarget) error {
 	if err := mock.On("MockApplyError"); err != nil {
 		return err.(error)
 	}
@@ -74,6 +75,12 @@ func (r fakeEndpoint) Recover(ctx context.Context, req ctrl.Request, chaos v1alp
 		return err.(error)
 	}
 	return nil
+}
+
+// Selectors would return the chaos target selectors
+func (r fakeEndpoint) Selectors(chaos v1alpha1.InnerObject) (selectors []v1alpha1.InnerSelector) {
+	selectors = []v1alpha1.InnerSelector{}
+	return selectors
 }
 
 var _ v1alpha1.InnerSchedulerObject = (*fakeTwoPhaseChaos)(nil)
@@ -269,10 +276,12 @@ var _ = Describe("TwoPhase", func() {
 			c := fake.NewFakeClientWithScheme(scheme.Scheme, &chaos)
 
 			r := Reconciler{
-				Endpoint: fakeEndpoint{},
-				Context: ctx.Context{
-					Client: c,
-					Log:    ctrl.Log.WithName("controllers").WithName("TwoPhase"),
+				Reconciler: &basic.Reconciler{
+					Endpoint: fakeEndpoint{},
+					Context: ctx.Context{
+						Client: c,
+						Log:    ctrl.Log.WithName("controllers").WithName("TwoPhase"),
+					},
 				},
 			}
 
@@ -293,10 +302,12 @@ var _ = Describe("TwoPhase", func() {
 			c := fake.NewFakeClientWithScheme(scheme.Scheme, &chaos)
 
 			r := Reconciler{
-				Endpoint: fakeEndpoint{},
-				Context: ctx.Context{
-					Client: c,
-					Log:    ctrl.Log.WithName("controllers").WithName("TwoPhase"),
+				Reconciler: &basic.Reconciler{
+					Endpoint: fakeEndpoint{},
+					Context: ctx.Context{
+						Client: c,
+						Log:    ctrl.Log.WithName("controllers").WithName("TwoPhase"),
+					},
 				},
 			}
 
@@ -333,10 +344,12 @@ var _ = Describe("TwoPhase", func() {
 			c := fake.NewFakeClientWithScheme(scheme.Scheme, &chaos)
 
 			r := Reconciler{
-				Endpoint: fakeEndpoint{},
-				Context: ctx.Context{
-					Client: c,
-					Log:    ctrl.Log.WithName("controllers").WithName("TwoPhase"),
+				Reconciler: &basic.Reconciler{
+					Endpoint: fakeEndpoint{},
+					Context: ctx.Context{
+						Client: c,
+						Log:    ctrl.Log.WithName("controllers").WithName("TwoPhase"),
+					},
 				},
 			}
 
@@ -364,10 +377,12 @@ var _ = Describe("TwoPhase", func() {
 			c := fake.NewFakeClientWithScheme(scheme.Scheme, &chaos)
 
 			r := Reconciler{
-				Endpoint: fakeEndpoint{},
-				Context: ctx.Context{
-					Client: c,
-					Log:    ctrl.Log.WithName("controllers").WithName("TwoPhase"),
+				Reconciler: &basic.Reconciler{
+					Endpoint: fakeEndpoint{},
+					Context: ctx.Context{
+						Client: c,
+						Log:    ctrl.Log.WithName("controllers").WithName("TwoPhase"),
+					},
 				},
 			}
 
@@ -390,10 +405,12 @@ var _ = Describe("TwoPhase", func() {
 			c := fake.NewFakeClientWithScheme(scheme.Scheme, &chaos)
 
 			r := Reconciler{
-				Endpoint: fakeEndpoint{},
-				Context: ctx.Context{
-					Client: c,
-					Log:    ctrl.Log.WithName("controllers").WithName("TwoPhase"),
+				Reconciler: &basic.Reconciler{
+					Endpoint: fakeEndpoint{},
+					Context: ctx.Context{
+						Client: c,
+						Log:    ctrl.Log.WithName("controllers").WithName("TwoPhase"),
+					},
 				},
 			}
 
@@ -419,10 +436,12 @@ var _ = Describe("TwoPhase", func() {
 			c := fake.NewFakeClientWithScheme(scheme.Scheme, &chaos)
 
 			r := Reconciler{
-				Endpoint: fakeEndpoint{},
-				Context: ctx.Context{
-					Client: c,
-					Log:    ctrl.Log.WithName("controllers").WithName("TwoPhase"),
+				Reconciler: &basic.Reconciler{
+					Endpoint: fakeEndpoint{},
+					Context: ctx.Context{
+						Client: c,
+						Log:    ctrl.Log.WithName("controllers").WithName("TwoPhase"),
+					},
 				},
 			}
 
@@ -467,10 +486,12 @@ var _ = Describe("TwoPhase", func() {
 			c := fake.NewFakeClientWithScheme(scheme.Scheme, &chaos)
 
 			r := Reconciler{
-				Endpoint: fakeEndpoint{},
-				Context: ctx.Context{
-					Client: c,
-					Log:    ctrl.Log.WithName("controllers").WithName("TwoPhase"),
+				Reconciler: &basic.Reconciler{
+					Endpoint: fakeEndpoint{},
+					Context: ctx.Context{
+						Client: c,
+						Log:    ctrl.Log.WithName("controllers").WithName("TwoPhase"),
+					},
 				},
 			}
 

@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
 	"github.com/chaos-mesh/chaos-mesh/api/v1alpha1"
+	"github.com/chaos-mesh/chaos-mesh/controllers/basic"
 	"github.com/chaos-mesh/chaos-mesh/pkg/mock"
 	ctx "github.com/chaos-mesh/chaos-mesh/pkg/router/context"
 )
@@ -218,10 +219,12 @@ func setupStateMachineWithStatus(status v1alpha1.ExperimentPhase) *chaosStateMac
 	c := fake.NewFakeClientWithScheme(scheme.Scheme, &chaos)
 
 	r := Reconciler{
-		Endpoint: fakeEndpoint{},
-		Context: ctx.Context{
-			Client: c,
-			Log:    ctrl.Log.WithName("controllers").WithName("TwoPhase"),
+		Reconciler: &basic.Reconciler{
+			Endpoint: fakeEndpoint{},
+			Context: ctx.Context{
+				Client: c,
+				Log:    ctrl.Log.WithName("controllers").WithName("TwoPhase"),
+			},
 		},
 	}
 

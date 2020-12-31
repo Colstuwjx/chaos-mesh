@@ -59,8 +59,20 @@ func (e *endpoint) Object() v1alpha1.InnerObject {
 	return &v1alpha1.NetworkChaos{}
 }
 
+// Selectors would return the chaos target selectors
+func (e *endpoint) Selectors(chaos v1alpha1.InnerObject) (selectors []v1alpha1.InnerSelector) {
+	networkchaos, ok := chaos.(*v1alpha1.NetworkChaos)
+	if !ok {
+		e.Log.Error("chaos is not NetworkChaos", "chaos", chaos)
+		return
+	}
+	selectors = append(selectors, &networkchaos.Spec)
+	selectors = append(selectors, (&networkchaos.Spec).Target)
+	return selectors
+}
+
 // Apply applies the chaos operation
-func (e *endpoint) Apply(ctx context.Context, req ctrl.Request, chaos v1alpha1.InnerObject) error {
+func (e *endpoint) Apply(ctx context.Context, req ctrl.Request, chaos v1alpha1.InnerObject, chaosTargets []*v1alpha1.InnerChaosTarget) error {
 	e.Log.Info("Applying network partition")
 
 	networkchaos, ok := chaos.(*v1alpha1.NetworkChaos)

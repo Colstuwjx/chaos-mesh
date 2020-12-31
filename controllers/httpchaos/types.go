@@ -24,33 +24,30 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/chaos-mesh/chaos-mesh/api/v1alpha1"
-	"github.com/chaos-mesh/chaos-mesh/controllers/config"
 	"github.com/chaos-mesh/chaos-mesh/pkg/events"
 	"github.com/chaos-mesh/chaos-mesh/pkg/finalizer"
 	"github.com/chaos-mesh/chaos-mesh/pkg/router"
 	ctx "github.com/chaos-mesh/chaos-mesh/pkg/router/context"
 	end "github.com/chaos-mesh/chaos-mesh/pkg/router/endpoint"
-	"github.com/chaos-mesh/chaos-mesh/pkg/selector"
 )
 
 type endpoint struct {
 	ctx.Context
 }
 
-func (r *endpoint) Apply(ctx context.Context, req ctrl.Request, chaos v1alpha1.InnerObject) error {
-	httpFaultChaos, ok := chaos.(*v1alpha1.HTTPChaos)
+func (r *endpoint) Apply(ctx context.Context, req ctrl.Request, chaos v1alpha1.InnerObject, chaosTargets []*v1alpha1.InnerChaosTarget) error {
+	httpChaos, ok := chaos.(*v1alpha1.HTTPChaos)
 	if !ok {
-		err := errors.New("chaos is not HttpFaultChaos")
-		r.Log.Error(err, "chaos is not HttpFaultChaos", "chaos", chaos)
+		err := errors.New("chaos is not HttpChaos")
+		r.Log.Error(err, "chaos is not HttpChaos", "chaos", chaos)
 		return err
 	}
-
-	pods, err := selector.SelectAndFilterPods(ctx, r.Client, r.Reader, &httpFaultChaos.Spec, config.ControllerCfg.ClusterScoped, config.ControllerCfg.TargetNamespace, config.ControllerCfg.AllowedNamespaces, config.ControllerCfg.IgnoredNamespaces)
-	if err != nil {
-		r.Log.Error(err, "failed to select and filter pods")
+	if len(chaosTargets) != 1 {
+		err := errors.New("unexpected chaos target for HttpChaos")
+		r.Log.Error(err, "invalid chaos target", "chaos", chaos)
 		return err
 	}
-	if err = r.applyAllPods(ctx, pods, httpFaultChaos); err != nil {
+	if err := r.applyAllPods(ctx, chaosTargets[0].Pods, httpChaos); err != nil {
 		r.Log.Error(err, "failed to apply chaos on all pods")
 		return err
 	}
@@ -58,18 +55,29 @@ func (r *endpoint) Apply(ctx context.Context, req ctrl.Request, chaos v1alpha1.I
 }
 
 func (r *endpoint) Recover(ctx context.Context, req ctrl.Request, chaos v1alpha1.InnerObject) error {
-	httpFaultChaos, ok := chaos.(*v1alpha1.HTTPChaos)
+	httpChaos, ok := chaos.(*v1alpha1.HTTPChaos)
 	if !ok {
 		err := errors.New("chaos is not HttpChaos")
 		r.Log.Error(err, "chaos is not HttpChaos", "chaos", chaos)
 		return err
 	}
-	r.Event(httpFaultChaos, v1.EventTypeNormal, events.ChaosRecovered, "")
+	r.Event(httpChaos, v1.EventTypeNormal, events.ChaosRecovered, "")
 	return nil
 }
 
 func (r *endpoint) Object() v1alpha1.InnerObject {
 	return &v1alpha1.HTTPChaos{}
+}
+
+// Selectors would return the chaos target selectors
+func (r *endpoint) Selectors(chaos v1alpha1.InnerObject) (selectors []v1alpha1.InnerSelector) {
+	httpchaos, ok := chaos.(*v1alpha1.HTTPChaos)
+	if !ok {
+		r.Log.Error("chaos is not HTTPChaos", "chaos", chaos)
+		return
+	}
+	selectors = append(selectors, &httpchaos.Spec)
+	return selectors
 }
 
 func (r *endpoint) applyAllPods(ctx context.Context, pods []v1.Pod, chaos *v1alpha1.HTTPChaos) error {

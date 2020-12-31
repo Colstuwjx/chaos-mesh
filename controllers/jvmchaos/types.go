@@ -31,7 +31,7 @@ type endpoint struct {
 }
 
 // Apply applies jvm-chaos
-func (r *endpoint) Apply(ctx context.Context, req ctrl.Request, chaos v1alpha1.InnerObject) error {
+func (r *endpoint) Apply(ctx context.Context, req ctrl.Request, chaos v1alpha1.InnerObject, chaosTargets []*v1alpha1.InnerChaosTarget) error {
 	// TODO
 	return nil
 }
@@ -45,6 +45,12 @@ func (r *endpoint) Recover(ctx context.Context, req ctrl.Request, chaos v1alpha1
 // Object would return the instance of chaos
 func (r *endpoint) Object() v1alpha1.InnerObject {
 	return &v1alpha1.JVMChaos{}
+}
+
+// Selectors would return the chaos target selectors
+func (r *endpoint) Selectors(chaos v1alpha1.InnerObject) (selectors []v1alpha1.InnerSelector) {
+	// TODO.
+	return []v1alpha1.InnerSelector{}
 }
 
 func init() {

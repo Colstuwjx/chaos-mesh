@@ -45,8 +45,19 @@ func (r *endpoint) Object() v1alpha1.InnerObject {
 	return &v1alpha1.IoChaos{}
 }
 
+// Selectors would return the chaos target selectors
+func (r *endpoint) Selectors(chaos v1alpha1.InnerObject) (selectors []v1alpha1.InnerSelector) {
+	iochaos, ok := chaos.(*v1alpha1.IoChaos)
+	if !ok {
+		r.Log.Error("chaos is not IoChaos", "chaos", chaos)
+		return
+	}
+	selectors = append(selectors, &iochaos.Spec)
+	return selectors
+}
+
 // Apply implements the reconciler.InnerReconciler.Apply
-func (r *endpoint) Apply(ctx context.Context, req ctrl.Request, chaos v1alpha1.InnerObject) error {
+func (r *endpoint) Apply(ctx context.Context, req ctrl.Request, chaos v1alpha1.InnerObject, chaosTargets []*v1alpha1.InnerChaosTarget) error {
 	iochaos, ok := chaos.(*v1alpha1.IoChaos)
 	if !ok {
 		err := errors.New("chaos is not IOChaos")

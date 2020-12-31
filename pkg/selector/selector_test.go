@@ -20,6 +20,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/chaos-mesh/chaos-mesh/api/v1alpha1"
+	"github.com/chaos-mesh/chaos-mesh/pkg/config"
 	"github.com/chaos-mesh/chaos-mesh/pkg/label"
 	. "github.com/chaos-mesh/chaos-mesh/pkg/testutils"
 
@@ -149,14 +150,18 @@ func TestSelectPods(t *testing.T) {
 	}
 
 	var (
-		testCfgClusterScoped     = true
-		testCfgTargetNamespace   = ""
-		testCfgAllowedNamespaces = ""
-		testCfgIgnoredNamespaces = ""
+		testCfg = &config.ChaosControllerConfig{
+			ClusterScoped:     true,
+			TargetNamespace:   "",
+			AllowedNamespaces: "",
+			IgnoredNamespaces: "",
+		}
 	)
 
+	chaoslister := NewChaosTargetLister(c, r, testCfg.ClusterScoped, testCfg.TargetNamespace, testCfg.AllowedNamespaces, testCfg.IgnoredNamespaces)
+
 	for _, tc := range tcs {
-		filteredPods, err := SelectPods(context.Background(), c, r, tc.selector, testCfgClusterScoped, testCfgTargetNamespace, testCfgAllowedNamespaces, testCfgIgnoredNamespaces)
+		filteredPods, err := chaoslister.SelectPods(context.Background(), tc.selector)
 		g.Expect(err).ShouldNot(HaveOccurred(), tc.name)
 		g.Expect(len(filteredPods)).To(Equal(len(tc.expectedPods)), tc.name)
 	}
@@ -366,7 +371,7 @@ func TestRandomFixedIndexes(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		values := RandomFixedIndexes(tc.start, tc.end, tc.count)
+		values := randomFixedIndexes(tc.start, tc.end, tc.count)
 		g.Expect(len(values)).To(Equal(tc.expectedOutputLen), tc.name)
 
 		for _, v := range values {

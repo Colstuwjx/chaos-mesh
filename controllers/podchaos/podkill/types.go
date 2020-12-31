@@ -41,7 +41,7 @@ type endpoint struct {
 }
 
 // Apply implements the reconciler.InnerReconciler.Apply
-func (r *endpoint) Apply(ctx context.Context, req ctrl.Request, chaos v1alpha1.InnerObject) error {
+func (r *endpoint) Apply(ctx context.Context, req ctrl.Request, chaos v1alpha1.InnerObject, chaosTargets []*v1alpha1.InnerChaosTarget) error {
 	podchaos, ok := chaos.(*v1alpha1.PodChaos)
 	if !ok {
 		err := errors.New("chaos is not PodChaos")
@@ -99,6 +99,17 @@ func (r *endpoint) Recover(ctx context.Context, req ctrl.Request, obj v1alpha1.I
 // Object implements the reconciler.InnerReconciler.Object
 func (r *endpoint) Object() v1alpha1.InnerObject {
 	return &v1alpha1.PodChaos{}
+}
+
+// Selectors would return the chaos target selectors
+func (r *endpoint) Selectors(chaos v1alpha1.InnerObject) (selectors []v1alpha1.InnerSelector) {
+	podchaos, ok := chaos.(*v1alpha1.PodChaos)
+	if !ok {
+		r.Log.Error("chaos is not PodChaos", "chaos", chaos)
+		return
+	}
+	selectors = append(selectors, &podchaos.Spec)
+	return selectors
 }
 
 func init() {

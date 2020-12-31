@@ -27,8 +27,9 @@ import (
 const iterMax = 1e4
 
 type chaosStateMachine struct {
-	Chaos v1alpha1.InnerSchedulerObject
-	Req   ctrl.Request
+	Chaos        v1alpha1.InnerSchedulerObject
+	ChaosTargets []*v1alpha1.InnerChaosTarget
+	Req          ctrl.Request
 	*Reconciler
 }
 
@@ -64,7 +65,7 @@ func apply(ctx context.Context, m *chaosStateMachine, targetPhase v1alpha1.Exper
 	status := m.Chaos.GetStatus()
 
 	m.Log.Info("applying", "current phase", currentPhase, "target phase", targetPhase)
-	err = m.Apply(ctx, m.Req, m.Chaos)
+	err = m.Apply(ctx, m.Req, m.Chaos, m.ChaosTargets)
 	if err != nil {
 		m.Log.Error(err, "fail to apply")
 

@@ -52,7 +52,7 @@ type endpoint struct {
 }
 
 // Apply applies stress-chaos
-func (r *endpoint) Apply(ctx context.Context, req ctrl.Request, chaos v1alpha1.InnerObject) error {
+func (r *endpoint) Apply(ctx context.Context, req ctrl.Request, chaos v1alpha1.InnerObject, chaosTargets []*v1alpha1.InnerChaosTarget) error {
 	stresschaos, ok := chaos.(*v1alpha1.StressChaos)
 	if !ok {
 		err := errors.New("chaos is not stresschaos")
@@ -179,6 +179,17 @@ func (r *endpoint) recoverPod(ctx context.Context, pod *v1.Pod, chaos *v1alpha1.
 // Object would return the instance of chaos
 func (r *endpoint) Object() v1alpha1.InnerObject {
 	return &v1alpha1.StressChaos{}
+}
+
+// Selectors would return the chaos target selectors
+func (r *endpoint) Selectors(chaos v1alpha1.InnerObject) (selectors []v1alpha1.InnerSelector) {
+	stresschaos, ok := chaos.(*v1alpha1.StressChaos)
+	if !ok {
+		r.Log.Error("chaos is not StressChaos", "chaos", chaos)
+		return
+	}
+	selectors = append(selectors, &stresschaos.Spec)
+	return selectors
 }
 
 func (r *endpoint) applyAllPods(ctx context.Context, pods []v1.Pod, chaos *v1alpha1.StressChaos) error {
